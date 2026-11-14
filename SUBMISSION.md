@@ -1,6 +1,6 @@
 # Tapsplit: HackOnVibe submission kit
 
-The questionnaire questions are posted in Discord, so the answers below cover the usual ones. Each answer is under 300 characters; `npm run check:answers` confirms it. Replace `LIVE_URL` with the deployed link before pasting.
+The questionnaire questions are posted in Discord, so the answers below cover the usual ones. Each answer is under 300 characters; `npm run check:answers` confirms it. Live link: https://tapsplit.tameimpala.workers.dev
 
 ## Questionnaire answers
 
@@ -11,7 +11,7 @@ Tapsplit
 Snap the bill, share one link, everyone taps what they had. Exact shares with tax and tip, one-tap pay back, no app and no sign-up.
 
 **Live link / where to test**
-LIVE_URL. Tap "Try a sample bill", then "Create split & get link". Open the link in a private window as a friend, tap items, then "I've paid".
+Open https://tapsplit.tameimpala.workers.dev, tap "Try a sample bill", then tap "Create split & get link". Open the link in a private window as a friend, tap items, then "I've paid".
 
 **What problem does it solve?**
 After a group dinner one person pays and then chases everyone. Splitting evenly is unfair to the person who had only soup, and itemising by hand in a chat takes ages. Tapsplit makes the fair split take 30 seconds and shows who still owes.
@@ -66,4 +66,4 @@ Record on a phone-sized browser window (or a real phone) so the taps are visible
 | 4:10–4:40 | Friend window | Scroll to **Paying next time? Split your own bill**, tap it. "Every friend who joins is one tap from starting their own split." |
 | 4:40–5:00 | Live stats | Open **Live stats**: splits, people reached, K-factor, referral chain. "Every number here is real usage." End. |
 
-Before recording: deploy, open LIVE_URL once to warm it up, and use a fresh browser profile so the stats start clean.
+Before recording: open https://tapsplit.tameimpala.workers.dev once to warm it up. Use a normal window for the payer and a private window (or a phone) for the friend, so they are two different people. Live stats count everyone's real usage, so the numbers you show will include earlier splits.

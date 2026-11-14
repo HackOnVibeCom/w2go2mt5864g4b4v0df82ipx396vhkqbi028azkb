@@ -2,13 +2,15 @@
 
 **Snap the bill. Share one link. Everyone taps what they had.**
 
+**Live:** https://tapsplit.tameimpala.workers.dev (also at the team site https://w2go2mt5864g4b4v0df82ipx396vhkqbi028azkb.hackonvibe.com)
+
 Tapsplit splits a restaurant bill by what each person actually ate, tax and tip included, down to the last paisa or cent. The person who paid snaps the receipt and drops one link in the group chat. Friends open it in their browser (no app, no sign-up), tap their items, see their exact share and pay back in one tap. The payer watches the board fill up and ticks off who has paid.
 
 Built for HackOnVibe November 2026, theme **Zero-CAC IT product**.
 
 ## Try it (2 minutes, no account)
 
-1. Open the app and tap **Try a sample bill** (or scan a real receipt).
+1. Open https://tapsplit.tameimpala.workers.dev and tap **Try a sample bill** (or scan a real receipt).
 2. Check the items, type your name, pick how friends pay you (UPI, PayPal, Venmo, Cash App, Revolut, Wise, any link, or just track it). Tap **Create split & get link**.
 3. Copy the link and open it in a private window or on your phone. You are now a friend: type a name and tap a few items. Your share updates instantly. Shared dishes split between everyone who tapped them, and "Beer ×3" bills per glass.
 4. Tap **I've paid**. Back in the first window, the payer's board updates within seconds; tap **Got it** to confirm.
