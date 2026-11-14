@@ -10,11 +10,12 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning src/node-server.js",
     "start": "node --disable-warning=ExperimentalWarning src/node-server.js",
-    "test": "node --disable-warning=ExperimentalWarning --test test/",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
     "build": "node scripts/build.mjs",
-    "cf:dev": "npx --yes wrangler@4.45.0 dev",
+    "cf:dev": "npx --yes wrangler@4.45.0 d1 migrations apply tapsplit --local && npx --yes wrangler@4.45.0 dev --port 8792",
     "cf:setup": "node scripts/cf-setup.mjs",
-    "cf:deploy": "npx --yes wrangler@4.45.0 deploy"
+    "cf:deploy": "node scripts/cf-deploy.mjs",
+    "check:answers": "node scripts/check-answers.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
