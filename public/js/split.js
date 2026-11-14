@@ -18,8 +18,10 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     localClaims: null,
     version: 0,
     saveTimer: null,
+    saving: null,
     pollTimer: null,
     joining: false,
+    changingPhase: false,
     dead: false,
   };
 
@@ -29,19 +31,24 @@ export function mountSplit(root, id, { isNew = false } = {}) {
   async function load(initial = false) {
     try {
       const fresh = await api('GET', `/splits/${id}${S.data && !initial ? `?rev=${S.data.rev}` : ''}`);
-      if (S.dead || !fresh) return;
-      S.data = fresh;
+      if (S.dead || !fresh || !accept(fresh)) return;
       if (S.sess.pid && !fresh.participants.some((p) => p.id === S.sess.pid)) {
         session.clear(id);
         S.sess = {};
       }
-      if (initial) mountShell();
+      if (!root.querySelector('#head')) mountShell();
       renderAll();
     } catch (err) {
-      if (initial) {
+      if (initial && !S.dead && !S.data) {
         root.innerHTML = `<div class="card"><h2>We couldn't open this split</h2><p class="muted">${esc(err.message)}</p><a class="btn primary" href="${paths.home()}" data-link>Split a new bill</a></div>`;
       }
     }
+  }
+
+  function accept(fresh) {
+    if (S.data && Number(fresh.rev) < Number(S.data.rev)) return false;
+    S.data = fresh;
+    return true;
   }
 
   // Merge the server state with my unsaved taps, then run the same split engine the server uses.
@@ -68,6 +75,7 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     root.innerHTML = `
       <section class="card bill-head" id="head"></section>
       <section id="sharebox"></section>
+      <section class="card settlement" id="settlement"></section>
       <section class="card ${myId() ? 'hidden' : ''}" id="joinbox">
         <p class="join-title">Who are you?</p>
         <form class="join" id="join-form">
@@ -79,8 +87,8 @@ export function mountSplit(root, id, { isNew = false } = {}) {
         <p class="small muted" id="joined-list" style="margin:6px 0 0"></p>
       </section>
       <section class="card">
-        <h2>What did you have?</h2>
-        <p class="small muted" style="margin:-4px 0 6px">Tap your items. Shared something? Everyone who had it taps it and it splits evenly.</p>
+        <h2 id="lines-title"></h2>
+        <p class="small muted" id="lines-help"></p>
         <ul class="lines" id="lines"></ul>
         <div id="extras"></div>
       </section>
@@ -92,14 +100,23 @@ export function mountSplit(root, id, { isNew = false } = {}) {
 
   function renderAll() {
     if (!S.data) return;
+    const active = document.activeElement;
+    const focusedItem = root.contains(active) ? active.dataset.item : null;
+    const focusedAction = active?.dataset.act;
     const v = derived();
     renderHead(v);
     renderShare(v);
+    renderSettlement(v);
     renderJoin();
     renderLines(v);
     renderBoard(v);
     renderCta();
     renderBar(v);
+    if (focusedItem && !active.isConnected) {
+      const buttons = [...root.querySelectorAll('#lines button[data-item]')].filter((button) => button.dataset.item === focusedItem);
+      const next = buttons.find((button) => button.dataset.act === focusedAction && !button.disabled) || buttons[0];
+      next?.focus({ preventScroll: true });
+    }
   }
 
   function renderHead(v) {
@@ -123,13 +140,15 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     const d = S.data;
     const friends = d.participants.filter((p) => !p.isPayer).length;
     const url = shareUrl(id);
-    const prominent = isNew || friends === 0;
-    const text = `${d.payerName} paid ${money(v.grandTotal, d.currency)} at ${d.title}. Tap what you had and Tapsplit works out your share:`;
+    const prominent = !d.finalizedAt && (isNew || friends === 0);
+    const text = d.finalizedAt
+      ? `${d.payerName} finalized the ${d.title} split. Open the link to see and pay your share:`
+      : `${d.payerName} paid ${money(v.grandTotal, d.currency)} at ${d.title}. Tap what you had and Tapsplit works out your share:`;
     const t = shareTargets(url, text);
     box.innerHTML = `
       <div class="share-box">
-        <h2>${prominent ? 'Now send this link to the group' : 'Share the link again'}</h2>
-        <p>${prominent ? 'Everyone opens it in their browser, taps what they had and pays you back. You can tap your own items below too.' : 'Anyone with the link can tap their items.'}</p>
+        <h2>${d.finalizedAt ? 'Let the group know they can pay' : prominent ? 'Now send this link to the group' : 'Share the link again'}</h2>
+        <p>${d.finalizedAt ? 'Send the same link so friends can open their final share.' : 'Friends can open the link and claim items. Tap your own items below too.'}</p>
         <div class="share-grid">
           <a class="btn" href="${esc(t.whatsapp)}" target="_blank" rel="noopener" data-share="whatsapp">WhatsApp</a>
           <a class="btn" href="${esc(t.telegram)}" target="_blank" rel="noopener" data-share="telegram">Telegram</a>
@@ -143,13 +162,41 @@ export function mountSplit(root, id, { isNew = false } = {}) {
 
   function renderJoin() {
     const box = root.querySelector('#joinbox');
-    box.classList.toggle('hidden', Boolean(myId()));
+    box.classList.toggle('hidden', Boolean(myId() || S.data.finalizedAt));
     const names = S.data.participants.map((p) => p.name);
     root.querySelector('#joined-list').textContent = names.length ? `Already here: ${names.join(', ')}` : '';
   }
 
+  function renderSettlement(v) {
+    const d = S.data;
+    const box = root.querySelector('#settlement');
+    const locked = Boolean(d.finalizedAt);
+    const marked = v.participants.some((p) => p.paidAt);
+    const remaining = d.items.filter((item) => item.price > 0 && v.lines[item.id].claimedShares < item.qty).length;
+    const canFinalize = remaining === 0;
+    const heading = locked ? 'Shares finalized' : 'The table is still claiming items';
+    let description;
+    if (locked) {
+      description = myId() ? 'Shares are locked. Everyone can now pay the amount shown.' : 'Ask the payer to reopen this split if you need to join.';
+    } else if (!isAdmin()) {
+      description = `Your share can change as others tap. ${esc(d.payerName)} will finalize it when everyone is done.`;
+    } else if (canFinalize) {
+      description = 'All priced items are claimed. Check that everyone at the table has finished before you finalize.';
+    } else {
+      description = `${remaining} ${remaining === 1 ? 'line has' : 'lines have'} unclaimed items. Ask the group or tap the items you’ll cover.`;
+    }
+    const action = isAdmin()
+      ? locked
+        ? (marked ? '' : `<button type="button" class="btn small" data-act="reopen" ${S.changingPhase ? 'disabled' : ''}>Reopen claims</button>`)
+        : `<button type="button" class="btn primary" data-act="finalize" ${!canFinalize || S.changingPhase ? 'disabled' : ''}>Finalize shares</button>`
+      : '';
+    box.innerHTML = `<div><h2>${heading}</h2><p class="small muted">${description}</p></div>${action}`;
+  }
+
   function renderLines(v) {
     const d = S.data;
+    root.querySelector('#lines-title').textContent = d.finalizedAt ? 'Final claims' : 'What did you have?';
+    root.querySelector('#lines-help').textContent = d.finalizedAt ? '' : 'Tap your items. Everyone who had a shared dish taps it.';
     const mine = myClaims();
     const byId = Object.fromEntries(v.participants.map((p) => [p.id, p]));
     root.querySelector('#lines').innerHTML = d.items
@@ -170,20 +217,21 @@ export function mountSplit(root, id, { isNew = false } = {}) {
           .map((p) => `<span class="chip" style="background:${personColor(p.id)}" title="${esc(p.name)}">${esc(initials(p.name))}</span>`)
           .join('');
         const stepper =
-          item.qty > 1 && myShares
+          !d.finalizedAt && item.qty > 1 && myShares
             ? `<div class="stepper" role="group" aria-label="How many ${esc(item.name)} you had">
                  <button type="button" data-act="minus" data-item="${item.id}" aria-label="One less">−</button>
                  <span>${myShares} of ${item.qty}</span>
                  <button type="button" data-act="plus" data-item="${item.id}" aria-label="One more" ${myShares >= item.qty ? 'disabled' : ''}>+</button>
                </div>`
             : '';
+        const lineContent = `
+          <span class="line-top"><span class="tick" aria-hidden="true">${myShares ? '✓' : ''}</span><span class="line-name">${esc(item.name)}${item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : ''}</span></span>
+          <span class="line-price">${money(item.price, d.currency)}</span>
+          <span class="line-meta" style="padding-left:30px"><span class="chips">${chips}</span>${meta}</span>`;
         return `
           <li class="line ${myShares ? 'mine' : ''}">
-            <button type="button" class="line-main" data-act="toggle" data-item="${item.id}" aria-pressed="${myShares > 0}">
-              <span class="line-top"><span class="tick" aria-hidden="true">${myShares ? '✓' : ''}</span><span class="line-name">${esc(item.name)}${item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : ''}</span></span>
-              <span class="line-price">${money(item.price, d.currency)}</span>
-              <span class="line-meta" style="padding-left:30px"><span class="chips">${chips}</span>${meta}</span>
-            </button>
+            ${d.finalizedAt ? `<div class="line-main">${lineContent}</div>`
+              : `<button type="button" class="line-main" data-act="toggle" data-item="${item.id}" aria-pressed="${myShares > 0}">${lineContent}</button>`}
             ${stepper}
           </li>`;
       })
@@ -198,15 +246,15 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     if (p.isPayer) return '<span class="pill">paid the bill</span>';
     if (p.confirmedAt) return '<span class="pill ok">received ✓</span>';
     if (p.paidAt) return '<span class="pill wait">says paid</span>';
-    if (p.total > 0) return '<span class="pill">owes</span>';
-    return '<span class="pill">tapping…</span>';
+    if (p.total > 0) return `<span class="pill">${S.data.finalizedAt ? 'owes' : 'estimated'}</span>`;
+    return `<span class="pill">${S.data.finalizedAt ? 'nothing due' : 'tapping…'}</span>`;
   }
 
   function renderBoard(v) {
     const d = S.data;
     const people = v.participants;
     const owed = people.filter((p) => !p.isPayer).reduce((a, p) => a + p.total, 0);
-    const back = people.filter((p) => !p.isPayer && (p.paidAt || p.confirmedAt)).reduce((a, p) => a + p.total, 0);
+    const back = people.filter((p) => !p.isPayer && p.confirmedAt).reduce((a, p) => a + (p.paidAmount ?? p.total), 0);
     const unclaimedNames = d.items
       .filter((it) => v.lines[it.id].unclaimed > 0)
       .map((it) => {
@@ -221,7 +269,7 @@ export function mountSplit(root, id, { isNew = false } = {}) {
           const count = Object.values(p.claims || {}).reduce((a, n) => a + n, 0);
           const you = p.id === myId() ? ' (you)' : '';
           const confirm =
-            isAdmin() && !p.isPayer && p.total > 0
+            isAdmin() && !p.isPayer && (p.paidAt || (d.finalizedAt && p.total > 0))
               ? p.confirmedAt
                 ? `<button type="button" class="btn ghost small" data-act="unconfirm" data-p="${p.id}">Undo</button>`
                 : `<button type="button" class="btn small" data-act="confirm" data-p="${p.id}">Got it</button>`
@@ -239,7 +287,7 @@ export function mountSplit(root, id, { isNew = false } = {}) {
           ? `<div class="person"><span class="chip" style="background:var(--warn-soft);color:var(--warn)">?</span><div><div class="person-name">Unclaimed</div><div class="person-sub">${esc(unclaimedNames.join(', '))}</div></div><div class="person-right"><span class="mono">${money(v.unclaimed.total, d.currency)}</span></div></div>`
           : ''
       }
-      <p class="small muted" style="margin:10px 0 0">${money(back, d.currency)} of ${money(owed, d.currency)} paid back so far.</p>
+      <p class="small muted" style="margin:10px 0 0">${money(back, d.currency)} of ${money(owed, d.currency)} confirmed received.</p>
       ${
         isAdmin()
           ? `<div class="board-tools">
@@ -273,19 +321,20 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     let note = '';
     if (meP.isPayer) {
       const owed = v.participants.filter((p) => !p.isPayer).reduce((a, p) => a + p.total, 0);
-      left = `<div class="bar-label">Friends owe you</div><div class="bar-amount">${money(owed, cur)}</div>`;
+      left = `<div class="bar-label">${d.finalizedAt ? 'Friends owe you' : 'Estimated from friends'}</div><div class="bar-amount">${money(owed, cur)}</div>`;
       actions = `<button type="button" class="btn primary" data-act="${canNativeShare() ? 'native-share' : 'copy-link'}">Share link</button>`;
       note = `Your own share: ${money(meP.total, cur)}${v.unclaimed.total > 0 ? ` · ${money(v.unclaimed.total, cur)} still unclaimed` : ''}`;
-    } else if (meP.total <= 0) {
-      left = `<div class="bar-label">Your share</div><div class="bar-amount">${money(0, cur)}</div>`;
-      note = 'Tap the items you had.';
     } else {
-      left = `<div class="bar-label">Your share${meP.extras ? `, incl. ${money(meP.extras, cur)} tax/tip` : ''}</div><div class="bar-amount">${money(meP.total, cur)}</div>`;
+      left = `<div class="bar-label">${d.finalizedAt ? 'Your final share' : 'Your estimated share'}</div><div class="bar-amount">${money(meP.total, cur)}</div>`;
       if (meP.confirmedAt) {
-        note = `${esc(d.payerName)} confirmed your payment. All settled ✓`;
+        note = `${esc(d.payerName)} confirmed receiving ${money(meP.paidAmount ?? meP.total, cur)}.`;
       } else if (meP.paidAt) {
         actions = `<button type="button" class="btn ghost small" data-act="unpay">Undo</button>`;
         note = `Marked as paid. Waiting for ${esc(d.payerName)} to confirm.`;
+      } else if (!d.finalizedAt) {
+        note = meP.total > 0 ? 'You can pay once the payer finalizes everyone’s share.' : 'Tap the items you had.';
+      } else if (meP.total <= 0) {
+        note = 'There’s nothing to pay.';
       } else {
         const link = payLink({
           method: d.pay.method,
@@ -307,6 +356,7 @@ export function mountSplit(root, id, { isNew = false } = {}) {
 
   // ---------- actions ----------
   function setShares(itemId, shares) {
+    if (S.data.finalizedAt || S.changingPhase) return;
     if (!myId()) {
       const input = root.querySelector('#join-name');
       input?.focus();
@@ -327,19 +377,54 @@ export function mountSplit(root, id, { isNew = false } = {}) {
   }
 
   async function saveClaims() {
-    const version = S.version;
-    const claims = S.localClaims;
-    if (!claims) return;
+    if (S.saving) return S.saving;
+    S.saving = persistClaims();
     try {
-      const fresh = await api('PUT', `/splits/${id}/participants/${myId()}/claims`, { claims }, S.sess.token || S.sess.admin);
+      return await S.saving;
+    } finally {
+      S.saving = null;
+    }
+  }
+
+  async function persistClaims() {
+    while (S.localClaims) {
+      const version = S.version;
+      const claims = S.localClaims;
+      try {
+        const fresh = await api('PUT', `/splits/${id}/participants/${myId()}/claims`, { claims }, S.sess.token || S.sess.admin);
+        if (S.dead) return false;
+        accept(fresh);
+        if (version === S.version) S.localClaims = null;
+        renderAll();
+      } catch (err) {
+        if (S.dead) return false;
+        toast(err.message);
+        S.localClaims = null;
+        await load(true);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function setFinalization(finalized) {
+    if (S.changingPhase) return;
+    S.changingPhase = true;
+    renderSettlement(derived());
+    try {
+      if (!await saveClaims() || S.dead) return;
+      const fresh = await api('PUT', `/splits/${id}/finalization`, { finalized, rev: S.data.rev }, S.sess.admin);
       if (S.dead) return;
-      S.data = fresh;
-      if (version === S.version) S.localClaims = null;
+      accept(fresh);
       renderAll();
+      toast(finalized ? 'Shares finalized. Friends can pay now.' : 'Claims reopened.');
     } catch (err) {
+      if (S.dead) return;
       toast(err.message);
-      S.localClaims = null;
-      load(true);
+      await load(true);
+    } finally {
+      S.changingPhase = false;
+      if (!S.dead) renderSettlement(derived());
     }
   }
 
@@ -358,7 +443,8 @@ export function mountSplit(root, id, { isNew = false } = {}) {
       S.sess = session.get(id);
       me.set({ name: name.trim() });
       const fresh = await api('GET', `/splits/${id}`);
-      S.data = fresh;
+      if (S.dead) return;
+      accept(fresh);
       renderAll();
       toast('Now tap everything you had.');
     } catch (e) {
@@ -371,10 +457,13 @@ export function mountSplit(root, id, { isNew = false } = {}) {
   async function personAction(path, body, pid = myId()) {
     try {
       const token = path === 'confirm' ? S.sess.admin : S.sess.token || S.sess.admin;
-      S.data = await api('POST', `/splits/${id}/participants/${pid}/${path}`, body, token);
-      renderAll();
+      const fresh = await api('POST', `/splits/${id}/participants/${pid}/${path}`, body, token);
+      if (!S.dead && accept(fresh)) renderAll();
     } catch (err) {
-      toast(err.message);
+      if (!S.dead) {
+        toast(err.message);
+        await load(true);
+      }
     }
   }
 
@@ -395,7 +484,8 @@ export function mountSplit(root, id, { isNew = false } = {}) {
     const d = S.data;
     track('share', id, 'native');
     try {
-      await navigator.share({ title: d.title, text: `${d.payerName} paid at ${d.title}. Tap what you had:`, url: shareUrl(id) });
+      const text = d.finalizedAt ? `The ${d.title} split is ready to pay.` : `${d.payerName} paid at ${d.title}. Tap what you had:`;
+      await navigator.share({ title: d.title, text, url: shareUrl(id) });
     } catch {
       /* user closed the sheet */
     }
@@ -427,14 +517,20 @@ export function mountSplit(root, id, { isNew = false } = {}) {
       case 'minus':
         setShares(itemId, current - 1);
         break;
+      case 'finalize':
+        setFinalization(true);
+        break;
+      case 'reopen':
+        setFinalization(false);
+        break;
       case 'pay':
-        personAction('paid', { paid: true });
+        personAction('paid', { paid: true, finalizedAt: S.data.finalizedAt });
         break;
       case 'unpay':
         personAction('paid', { paid: false });
         break;
       case 'confirm':
-        personAction('confirm', { confirmed: true }, el.dataset.p);
+        personAction('confirm', { confirmed: true, finalizedAt: S.data.finalizedAt }, el.dataset.p);
         break;
       case 'unconfirm':
         personAction('confirm', { confirmed: false }, el.dataset.p);

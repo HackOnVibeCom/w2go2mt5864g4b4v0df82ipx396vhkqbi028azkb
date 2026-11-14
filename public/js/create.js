@@ -4,6 +4,7 @@ import { readReceiptImage } from './scan.js';
 import { parseReceipt, SAMPLE_RECEIPT } from '../lib/parse.js';
 import { currencyDigits, toMinor } from '../lib/money.js';
 import { PAY_METHODS } from '../lib/pay.js';
+import { landingPreview, mountPreview } from './preview.js';
 
 const TZ_CURRENCY = {
   'Asia/Kolkata': 'INR', 'Asia/Calcutta': 'INR', 'Europe/London': 'GBP', 'Asia/Dubai': 'AED',
@@ -73,13 +74,21 @@ export function mountCreate(root, { ref } = {}) {
   if (state.payMethod === 'upi' && state.currency !== 'INR') state.payMethod = 'none';
 
   root.innerHTML = `
-    <section class="hero">
-      <h1>Snap the bill. Share one link. <mark>Everyone taps what they had.</mark></h1>
-      <p>Tapsplit works out each person's exact share, tax and tip included, and gives them a one-tap way to pay you back. No app, no sign-up.</p>
+    <section class="landing">
+      <div class="landing-intro">
+        <h1>Split the bill<br> <mark>by the bite.</mark></h1>
+        <p>Scan the receipt and share one link. Friends tap what they had, and Tapsplit works out what each person owes, tax and tip included.</p>
+        <div class="landing-actions">
+          <button type="button" class="btn primary" data-act="start">Split a bill <span aria-hidden="true">↘</span></button>
+          <button type="button" class="btn" data-act="preview">Try the interactive demo</button>
+        </div>
+        <p class="landing-note">Free · No app or account required</p>
+      </div>
+      ${landingPreview()}
     </section>
-    <form class="receipt" id="create" novalidate>
+    <form class="receipt create-flow" id="create" novalidate>
       <div class="step">
-        <h2 class="step-title"><span class="step-num">01</span>Add the bill</h2>
+        <h2 class="step-title" id="create-title" tabindex="-1">Add the bill</h2>
         <div class="tabs" role="tablist" aria-label="How to add the bill">
           <button type="button" class="tab" role="tab" data-tab="scan">Scan photo</button>
           <button type="button" class="tab" role="tab" data-tab="paste">Paste text</button>
@@ -90,15 +99,7 @@ export function mountCreate(root, { ref } = {}) {
       </div>
       <div id="editor-step"></div>
       <div id="you-step"></div>
-    </form>
-    <section aria-labelledby="how-title">
-      <h2 id="how-title" class="sub-title">How it works</h2>
-      <ol class="how">
-        <li><div><b>You paid. Snap the receipt.</b><span>Tapsplit reads the items, tax and service charge.</span></div></li>
-        <li><div><b>Drop one link in the group chat.</b><span>Friends open it in their browser and tap what they had. Shared dishes split automatically.</span></div></li>
-        <li><div><b>Everyone pays their exact share.</b><span>One tap opens UPI, PayPal, Venmo or Cash App with the amount filled in. You see who has paid.</span></div></li>
-      </ol>
-    </section>`;
+    </form>`;
 
   const form = root.querySelector('#create');
   const panel = root.querySelector('#panel');
@@ -135,6 +136,7 @@ export function mountCreate(root, { ref } = {}) {
 
   function applyParsed(parsed, source) {
     if (parsed.currency && COMMON.includes(parsed.currency)) state.currency = parsed.currency;
+    if (state.payMethod === 'upi' && state.currency !== 'INR') state.payMethod = 'none';
     state.items = parsed.items.map((it) => ({ name: it.name, qty: it.qty || 1, amount: fmtInput(it.amount) }));
     state.extras = parsed.extras.map((e) => ({ label: e.label, amount: fmtInput(e.amount) }));
     state.receiptTotal = parsed.total || 0;
@@ -190,7 +192,7 @@ export function mountCreate(root, { ref } = {}) {
     }
     editorStep.innerHTML = `
       <div class="step">
-        <h2 class="step-title"><span class="step-num">02</span>Check the items</h2>
+        <h2 class="step-title">Check the items</h2>
         ${state.note ? `<p class="small muted" style="margin:-6px 0 10px">${esc(state.note)}</p>` : ''}
         <div class="editor" id="items">
           <div class="ed-head"><span>Item</span><span>Qty</span><span style="text-align:right">Price</span><span></span></div>
@@ -263,7 +265,7 @@ export function mountCreate(root, { ref } = {}) {
     const method = PAY_METHODS[state.payMethod] || PAY_METHODS.none;
     youStep.innerHTML = `
       <div class="step">
-        <h2 class="step-title"><span class="step-num">03</span>Who paid?</h2>
+        <h2 class="step-title">Who paid?</h2>
         <div class="row2">
           <label class="field"><span>Your name</span><input class="input" id="payer" autocomplete="given-name" maxlength="40" value="${esc(state.payerName)}" placeholder="e.g. Asha"></label>
           <label class="field"><span>Where</span><input class="input" id="title" maxlength="80" value="${esc(state.title)}" placeholder="e.g. Friday dinner"></label>
@@ -287,6 +289,7 @@ export function mountCreate(root, { ref } = {}) {
   // ---------- events ----------
   const ac = new AbortController();
   const opts = { signal: ac.signal };
+  mountPreview(root, opts);
   root.addEventListener('click', (e) => {
     const tab = e.target.closest('[data-tab]');
     if (tab) {
@@ -298,6 +301,13 @@ export function mountCreate(root, { ref } = {}) {
     if (!act) return;
     const i = Number(act.dataset.i);
     switch (act.dataset.act) {
+      case 'start':
+        root.querySelector('#create-title').focus({ preventScroll: true });
+        form.scrollIntoView({ block: 'start' });
+        break;
+      case 'preview':
+        root.querySelector('#preview-dialog').showModal();
+        break;
       case 'sample':
         state.tab = 'paste';
         state.currency = 'INR'; // the sample is an Indian restaurant bill
@@ -412,5 +422,8 @@ export function mountCreate(root, { ref } = {}) {
   }, opts);
 
   renderTabs();
-  return () => ac.abort();
+  return () => {
+    ac.abort();
+    root.querySelector('#preview-dialog')?.close();
+  };
 }

@@ -11,7 +11,7 @@ Tapsplit
 Snap the bill, share one link, everyone taps what they had. Exact shares with tax and tip, one-tap pay back, no app and no sign-up.
 
 **Live link / where to test**
-Open https://tapsplit.tameimpala.workers.dev, tap "Try a sample bill", then tap "Create split & get link". Open the link in a private window as a friend, tap items, then "I've paid".
+Open https://tapsplit.tameimpala.workers.dev and tap "Try the interactive demo" to try both roles in one browser. To test the live flow, create a sample bill and open its shared link in a private window.
 
 **What problem does it solve?**
 After a group dinner one person pays and then chases everyone. Splitting evenly is unfair to the person who had only soup, and itemising by hand in a chat takes ages. Tapsplit makes the fair split take 30 seconds and shows who still owes.
@@ -20,22 +20,22 @@ After a group dinner one person pays and then chases everyone. Splitting evenly 
 Anyone who eats out with friends, colleagues or family: students, office lunch groups, trips, flatmates. Every person at the table needs it, and every one of them is the next person to pay the bill.
 
 **How does it spread with zero CAC?**
-It can't be used alone: the payer must share the link to get paid, so every split reaches 2–8 new people at the moment they feel the problem. Link previews show the bill; every page offers "Split your own bill" with referral tracking.
+The payer shares one link so friends can claim their items and pay. Each guest sees the product while using it and can start a bill of their own from that page. Tapsplit measures how often invitees become creators.
 
 **What already works?**
-Scan, paste or type a bill; exact split engine with shared items and prorated tax/tip; live tapping for the whole table; one-tap UPI, PayPal, Venmo and Cash App links; payer confirms money received; live growth dashboard with K-factor.
+Scan, paste or type a bill. Friends share items and see live estimates with tax and tip. The payer locks the amounts, friends pay externally and the payer confirms receipt. Live stats track referrals and confirmations.
 
 **Which function should judges test?**
-The split itself: create a sample bill, open the share link in a second window, join as a friend and tap items. Your share (with tax and tip) appears at once, and the payer's board updates within seconds.
+Tap an item in the interactive demo and watch the price change. Switch to the payer to lock shares, then mark the practice payment and confirm it. The live app uses the same split engine.
 
 **Business model**
 Free for people; the loop is the acquisition. Revenue: affiliate fees from wallets and remittance apps on pay-back taps; a per-outlet SaaS where restaurants print a "Split with Tapsplit" QR from their POS; a Plus tier for trip and flat balances.
 
 **How will you measure success?**
-The /growth page shows live, unseeded numbers: splits created, people reached per split, the share who create their own split, the viral coefficient K, referral-chain depth and money settled. K above 1 means each split brings more than one new split.
+Live stats shows bills created, guest browsers reached, creators who followed a referral link, an estimated viral coefficient, and payment amounts confirmed by the payer. Practice activity stays out of those numbers.
 
 **Tech stack / architecture**
-Vanilla JS front end with no build step; a platform-neutral JSON API on Cloudflare Workers with D1 (SQLite), plus a Node + SQLite build for self-hosting. On-device OCR (Tesseract.js), optional Claude vision. 16 automated tests.
+Vanilla JavaScript, Cloudflare Workers and D1, with Node and SQLite for self-hosting. The browser and API share one split engine. Tesseract.js provides on-device OCR, with optional Claude vision.
 
 **What is AI-assisted about it?**
 Built end to end with Claude Code. In the product, receipts are read by Claude vision into structured line items when an API key is set, and by on-device OCR plus our receipt parser otherwise, so scanning works with no key and no cost.
@@ -44,7 +44,7 @@ Built end to end with Claude Code. In the product, receipts are read by Claude v
 Every group meal ends with a bill. Tapsplit removes the awkward chasing, keeps a record of who paid, and needs nothing installed, so it is the easiest thing to reach for next time. Each friend who used it once can start the next split.
 
 **Can anyone in the world use it?**
-Yes. It runs in any phone browser, needs no account, handles 48 currencies with correct decimals, reads receipts in any layout and links to local payment apps (UPI in India, Venmo and Cash App in the US, Revolut and Wise in Europe).
+It runs in modern phone browsers, needs no account and supports 48 currencies. Check scanned items before sharing, or type them in. Use a supported local payment app or track payments made separately.
 
 **What's next?**
 Restaurant QR pilots, WhatsApp-first sharing tweaks, running balances for trips and flatmates, and more pay-back rails (Pix, M-Pesa, GCash).
@@ -55,15 +55,12 @@ Record on a phone-sized browser window (or a real phone) so the taps are visible
 
 | Time | Screen | What you do and say |
 | --- | --- | --- |
-| 0:00–0:20 | Home page | "This is Tapsplit. One person paid for dinner; we'll split it fairly in under a minute, with no app and no sign-up." |
-| 0:20–0:50 | Home, Scan tab | Tap **Scan photo** and photograph a real bill (or skip to the sample). Show items appearing. "The receipt becomes line items, and the total is checked against the printed one." |
-| 0:50–1:20 | Home | Tap **Try a sample bill**. Point at the 7 items, service charge and taxes, and the green "Matches the receipt total of ₹2,585" check. |
-| 1:20–1:50 | Who paid? | Type "Asha", pick **UPI**, enter a handle such as `asha@okbank`. Tap **Create split & get link**. |
-| 1:50–2:20 | Split page (payer) | "This is the link I drop in the group chat." Show WhatsApp / Telegram / Copy. Tap Dal and one Beer: "My share, tax and tip included: ₹649." |
-| 2:20–3:10 | Second window (friend) | Paste the link in a private window. Type "Ravi", tap **Start tapping**. Tap Paneer, one Butter Naan, one Beer. "Ravi owes ₹770: ₹700 of food plus his fair share of service and tax." |
-| 3:10–3:40 | Friend: pay bar | Show the **Pay Asha** button: it opens UPI with ₹770 already filled in. Tap **I've paid**. |
-| 3:40–4:10 | Payer window | Board shows Ravi as "says paid" within seconds. Tap **Got it**. Point at the progress meter and the unclaimed row. |
-| 4:10–4:40 | Friend window | Scroll to **Paying next time? Split your own bill**, tap it. "Every friend who joins is one tap from starting their own split." |
-| 4:40–5:00 | Live stats | Open **Live stats**: splits, people reached, K-factor, referral chain. "Every number here is real usage." End. |
+| 0:00–0:40 | Home | Open **Try the interactive demo**. Tap pizza as Ravi and show his ₹352 share, then switch to Asha and finalize. Mark and confirm the practice payment. |
+| 0:40–1:15 | Bill editor | Close the demo, tap **Try a sample bill** and point out the ₹2,585 receipt check. Enter Asha's name, choose **Just track it**, and create the bill. |
+| 1:15–1:45 | Payer window | Show **Copy link** and WhatsApp. Open the link in a private window as Ravi. |
+| 1:45–2:40 | Guest and payer windows | As Ravi, tap Paneer, one naan and one beer. As Asha, claim the remaining items, including one naan and two beers. Check that the ₹2,585 is fully claimed. |
+| 2:40–3:15 | Payer window | Tap **Finalize shares** and show the option to send the same link back to the group. |
+| 3:15–4:00 | Guest and payer windows | Show Ravi's ₹770 final share. In this test bill, demonstrate the **I've paid** and **Got it** controls. |
+| 4:00–5:00 | Guest and Live stats | As Ravi, tap **Split your own bill** and create a bill. Open **Live stats** and point out the referrals and payer-confirmed payments. |
 
 Before recording: open https://tapsplit.tameimpala.workers.dev once to warm it up. Use a normal window for the payer and a private window (or a phone) for the friend, so they are two different people. Live stats count everyone's real usage, so the numbers you show will include earlier splits.

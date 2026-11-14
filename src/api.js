@@ -49,6 +49,10 @@ async function route(request, env, ctx) {
     const id = parts[1];
     if (!isId(id)) throw new HttpError(404, 'This split does not exist.');
     if (parts.length === 2 && method === 'GET') return getSplit(db, id, url.searchParams.get('rev'));
+    if (parts.length === 3 && parts[2] === 'finalization' && method === 'PUT') {
+      limit(ctx.ip, 'write', 120);
+      return setFinalization(request, db, id, ctx);
+    }
     if (parts[2] === 'participants') {
       limit(ctx.ip, 'write', 120);
       if (parts.length === 3 && method === 'POST') return join(request, db, id, ctx);
@@ -113,7 +117,8 @@ async function createSplit(request, db, { now }) {
 }
 
 async function loadSplit(db, id) {
-  const row = await db.prepare('SELECT * FROM splits WHERE id = ?').bind(id).first();
+  const row = await db.prepare(`SELECT s.*, f.finalized_at FROM splits s
+    LEFT JOIN split_finalizations f ON f.split_id = s.id WHERE s.id = ?`).bind(id).first();
   if (!row) throw new HttpError(404, 'This split does not exist (or the link is incomplete).');
   return {
     ...row,
@@ -124,7 +129,7 @@ async function loadSplit(db, id) {
 
 async function loadParticipants(db, id) {
   const { results } = await db
-    .prepare('SELECT * FROM participants WHERE split_id = ? ORDER BY is_payer DESC, created_at ASC')
+    .prepare('SELECT * FROM participants WHERE split_id = ? ORDER BY is_payer DESC, created_at ASC, id ASC')
     .bind(id)
     .all();
   return results.map((p) => ({ ...p, claims: JSON.parse(p.claims) }));
@@ -148,6 +153,7 @@ export function publicView(split, participants) {
     extras: split.extras,
     pay: { method: split.pay_method, handle: split.pay_handle },
     createdAt: split.created_at,
+    finalizedAt: split.finalized_at,
     rev: String(split.updated_at),
     participants: participants.map((p) => ({
       id: p.id,
@@ -155,6 +161,7 @@ export function publicView(split, participants) {
       isPayer: Boolean(p.is_payer),
       claims: p.claims,
       paidAt: p.paid_at,
+      paidAmount: p.paid_amount,
       confirmedAt: p.confirmed_at,
       ...computed.participants[p.id],
     })),
@@ -168,13 +175,48 @@ export function publicView(split, participants) {
   };
 }
 
+const finalized = 'EXISTS (SELECT 1 FROM split_finalizations WHERE split_id = ?)';
+
+async function setFinalization(request, db, id, { now }) {
+  const split = await loadSplit(db, id);
+  if (!safeEqual(requestToken(request), split.admin_token)) throw new HttpError(403, 'Only the payer can finalize or reopen this split.');
+  const body = await readJson(request);
+  if (typeof body?.finalized !== 'boolean') throw new HttpError(400, 'Choose whether to finalize or reopen the split.');
+  if (body.finalized === Boolean(split.finalized_at)) return getSplit(db, id);
+  if (body.rev !== String(split.updated_at)) throw new HttpError(409, 'The bill changed. Review the latest claims and try again.');
+
+  let change;
+  if (body.finalized) {
+    const bill = computeSplit(split, await loadParticipants(db, id));
+    if (split.items.some((item, i) => item.price > 0 && bill.items[i].claimedShares < item.qty)) {
+      throw new HttpError(409, 'Claim every remaining item before finalizing the split.');
+    }
+    change = db.prepare(`INSERT OR IGNORE INTO split_finalizations (split_id, finalized_at)
+      SELECT id, MAX(?, updated_at + 1) FROM splits WHERE id = ? AND updated_at = ?`).bind(now, id, split.updated_at);
+  } else {
+    change = db.prepare(`DELETE FROM split_finalizations WHERE split_id = ?
+      AND EXISTS (SELECT 1 FROM splits WHERE id = ? AND updated_at = ?)
+      AND NOT EXISTS (SELECT 1 FROM participants WHERE split_id = ? AND paid_at IS NOT NULL)`)
+      .bind(id, id, split.updated_at, id);
+  }
+
+  const [result] = await db.batch([change, touch(db, id, now)]);
+  if (!result.meta.changes) {
+    throw new HttpError(409, body.finalized
+      ? 'The bill changed. Review the latest claims and try again.'
+      : 'The bill changed or a payment is already marked. Review the latest payment status.');
+  }
+  return getSplit(db, id);
+}
+
 // ---------- participants ----------
 
 async function join(request, db, id, { now }) {
   const body = await readJson(request);
   const name = cleanText(body.name, 40);
   if (!name) throw new HttpError(400, 'Tell us your name so the payer knows who tapped what.');
-  await loadSplit(db, id);
+  const split = await loadSplit(db, id);
+  if (split.finalized_at) throw new HttpError(409, 'This split is finalized. Ask the payer if you need to join.');
   const people = await loadParticipants(db, id);
   if (people.length >= MAX_PEOPLE) throw new HttpError(409, 'This split is full.');
   if (people.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
@@ -182,15 +224,16 @@ async function join(request, db, id, { now }) {
   }
   const pid = randomId(10);
   const token = randomId(24);
-  await db.batch([
+  const [result] = await db.batch([
     db
       .prepare(
         `INSERT INTO participants (id, split_id, name, token, claims, is_payer, vid, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '{}', 0, ?, ?, ?)`,
+         SELECT ?, ?, ?, ?, '{}', 0, ?, ?, ? WHERE NOT ${finalized}`,
       )
-      .bind(pid, id, name, token, visitorId(request), now, now),
+      .bind(pid, id, name, token, visitorId(request), now, now, id),
     touch(db, id, now),
   ]);
+  if (!result.meta.changes) throw new HttpError(409, 'This split is finalized. Ask the payer if you need to join.');
   return json({ participantId: pid, participantToken: token }, 201);
 }
 
@@ -201,67 +244,84 @@ async function authorize(request, db, splitId, pid) {
     .bind(pid, splitId)
     .first();
   if (!person) throw new HttpError(404, 'Unknown person.');
-  const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const token = requestToken(request);
   const isAdmin = safeEqual(token, split.admin_token);
   const isSelf = safeEqual(token, person.token);
   return { split, person, isAdmin, isSelf };
 }
 
+function requestToken(request) {
+  return (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+}
+
 async function updateClaims(request, db, splitId, pid, { now }) {
   const { split, isAdmin, isSelf } = await authorize(request, db, splitId, pid);
   if (!isAdmin && !isSelf) throw new HttpError(403, 'You can only change your own items.');
+  if (split.finalized_at) throw new HttpError(409, 'This bill is finalized and the shares are locked.');
   const body = await readJson(request);
   const claims = validateClaims(body.claims, split.items);
-  await db.batch([
+  const [result] = await db.batch([
     db
-      .prepare('UPDATE participants SET claims = ?, updated_at = ? WHERE id = ?')
-      .bind(JSON.stringify(claims), now, pid),
+      .prepare(`UPDATE participants SET claims = ?, updated_at = ? WHERE id = ? AND NOT ${finalized}`)
+      .bind(JSON.stringify(claims), now, pid, splitId),
     touch(db, splitId, now),
   ]);
+  if (!result.meta.changes) throw new HttpError(409, 'This bill is finalized and the shares are locked.');
   return getSplit(db, splitId);
 }
 
 async function markPaid(request, db, splitId, pid, { now }) {
-  const { isAdmin, isSelf, person } = await authorize(request, db, splitId, pid);
+  const { split, isAdmin, isSelf, person } = await authorize(request, db, splitId, pid);
   if (!isAdmin && !isSelf) throw new HttpError(403, 'You can only mark your own payment.');
   if (person.is_payer) throw new HttpError(400, 'The payer does not owe themselves.');
   const body = await readJson(request);
-  const paid = Boolean(body.paid);
-  let amount = null;
-  if (paid) {
-    const split = await loadSplit(db, splitId);
-    const people = await loadParticipants(db, splitId);
-    amount = computeSplit(split, people).participants[pid].total;
-  }
-  await db.batch([
+  if (typeof body?.paid !== 'boolean') throw new HttpError(400, 'Choose whether to mark or undo your payment.');
+  const { paid } = body;
+  const amount = paid ? await paymentAmount(db, split, pid, body.finalizedAt) : null;
+  const [result] = await db.batch([
     db
-      .prepare('UPDATE participants SET paid_at = ?, paid_amount = ?, confirmed_at = CASE WHEN ? THEN confirmed_at ELSE NULL END, updated_at = ? WHERE id = ?')
-      .bind(paid ? now : null, amount, paid ? 1 : 0, now, pid),
+      .prepare(`UPDATE participants SET paid_at = CASE WHEN ? THEN COALESCE(paid_at, ?) END,
+        paid_amount = CASE WHEN ? THEN COALESCE(paid_amount, ?) END, updated_at = ? WHERE id = ?
+        AND (NOT ? OR EXISTS (SELECT 1 FROM split_finalizations WHERE split_id = ? AND finalized_at = ?))
+        AND (confirmed_at IS NULL OR ?)`)
+      .bind(Number(paid), now, Number(paid), amount, now, pid, Number(paid), splitId, split.finalized_at, Number(paid)),
     touch(db, splitId, now),
   ]);
+  if (!result.meta.changes) throw new HttpError(409, 'The payment status changed. Check the latest status and try again.');
   return getSplit(db, splitId);
 }
 
 async function confirmPaid(request, db, splitId, pid, { now }) {
-  const { isAdmin, person } = await authorize(request, db, splitId, pid);
+  const { split, isAdmin, person } = await authorize(request, db, splitId, pid);
   if (!isAdmin) throw new HttpError(403, 'Only the payer can confirm money arrived.');
   if (person.is_payer) throw new HttpError(400, 'The payer does not owe themselves.');
   const body = await readJson(request);
-  const confirmed = Boolean(body.confirmed);
-  let amount = person.paid_amount;
-  if (confirmed && amount == null) {
-    const split = await loadSplit(db, splitId);
-    amount = computeSplit(split, await loadParticipants(db, splitId)).participants[pid].total;
-  }
-  await db.batch([
+  if (typeof body?.confirmed !== 'boolean') throw new HttpError(400, 'Choose whether to confirm or undo receipt of the payment.');
+  const { confirmed } = body;
+  // Bills created before finalization can already have a recorded payment.
+  const recorded = confirmed && !split.finalized_at && person.paid_at != null && person.paid_amount != null;
+  const amount = confirmed && !recorded ? await paymentAmount(db, split, pid, body.finalizedAt) : null;
+  const [result] = await db.batch([
     db
       .prepare(
-        'UPDATE participants SET confirmed_at = ?, paid_at = COALESCE(paid_at, ?), paid_amount = ?, updated_at = ? WHERE id = ?',
+        `UPDATE participants SET confirmed_at = ?, paid_at = COALESCE(paid_at, ?),
+          paid_amount = COALESCE(paid_amount, ?), updated_at = ? WHERE id = ?
+          AND (NOT ? OR (? AND paid_at IS NOT NULL AND paid_amount IS NOT NULL)
+            OR EXISTS (SELECT 1 FROM split_finalizations WHERE split_id = ? AND finalized_at = ?))`,
       )
-      .bind(confirmed ? now : null, confirmed ? now : null, amount, now, pid),
+      .bind(confirmed ? now : null, confirmed ? now : null, amount, now, pid, Number(confirmed), Number(recorded), splitId, split.finalized_at),
     touch(db, splitId, now),
   ]);
+  if (!result.meta.changes) throw new HttpError(409, 'The bill changed. Check the latest amount and try again.');
   return getSplit(db, splitId);
+}
+
+async function paymentAmount(db, split, pid, finalizedAt) {
+  if (!split.finalized_at) throw new HttpError(409, 'Wait for the payer to finalize the split before paying.');
+  if (finalizedAt !== split.finalized_at) throw new HttpError(409, 'The final share changed. Check the latest amount and try again.');
+  const amount = computeSplit(split, await loadParticipants(db, split.id)).participants[pid].total;
+  if (amount <= 0) throw new HttpError(400, 'There is no payment due for this person.');
+  return amount;
 }
 
 function touch(db, splitId, now) {
@@ -324,10 +384,11 @@ export async function growth(db, now = Date.now()) {
   const settled = await all(
     `SELECT s.currency AS currency, SUM(p.paid_amount) AS amount, COUNT(*) AS n
        FROM participants p JOIN splits s ON s.id = p.split_id
-      WHERE p.is_payer = 0 AND p.paid_at IS NOT NULL AND p.paid_amount IS NOT NULL
+      WHERE p.is_payer = 0 AND p.confirmed_at IS NOT NULL AND p.paid_amount IS NOT NULL
       GROUP BY s.currency ORDER BY n DESC`,
   );
-  const since = now - 13 * 86_400_000;
+  const dayMs = 86_400_000;
+  const since = (Math.floor(now / dayMs) - 13) * dayMs;
   const daily = await all(
     `SELECT date(created_at / 1000, 'unixepoch') AS day, COUNT(*) AS splits
        FROM splits WHERE created_at >= ? GROUP BY day ORDER BY day`,
@@ -345,7 +406,7 @@ export async function growth(db, now = Date.now()) {
   const conversion = reached ? Number(converted.n) / reached : 0;
   const joinedByDay = Object.fromEntries(dailyJoins.map((d) => [d.day, Number(d.joins)]));
   const days = [];
-  for (let t = since; t <= now; t += 86_400_000) {
+  for (let t = since; t <= now; t += dayMs) {
     const day = new Date(t).toISOString().slice(0, 10);
     const s = daily.find((d) => d.day === day);
     days.push({ day, splits: s ? Number(s.splits) : 0, joins: joinedByDay[day] || 0 });

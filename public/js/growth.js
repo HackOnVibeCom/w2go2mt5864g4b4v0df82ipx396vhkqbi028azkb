@@ -9,7 +9,7 @@ export function mountGrowth(root) {
   root.innerHTML = `
     <section class="hero">
       <h1>Every split puts Tapsplit in front of <mark>the whole table</mark>.</h1>
-      <p>Nobody can use their share without opening the link, and everyone who opens it is the next person to pay for dinner. These are live numbers from this deployment's database.</p>
+      <p>A payer shares the bill. Friends open the link, claim their items and can start a bill of their own. See how often that happens on this site.</p>
     </section>
     <div id="g"><div class="skeleton"></div></div>`;
 
@@ -29,10 +29,10 @@ export function mountGrowth(root) {
       <div class="stats">
         <div class="stat hero-stat">
           <div class="v">${g.kFactor.toFixed(2)}</div>
-          <div class="k">Viral coefficient (K) = ${g.invitesPerSplit.toFixed(1)} people reached per split × ${pct(g.conversion)} of them starting their own split. Above 1.0, each split creates more than one new split with zero ad spend.</div>
+          <div class="k">Estimated viral coefficient · ${g.invitesPerSplit.toFixed(1)} guest browsers reached per bill × ${pct(g.conversion)} of reached browsers later creating a bill.</div>
         </div>
         <div class="stat"><div class="v">${num(g.splits)}</div><div class="k">bills split</div></div>
-        <div class="stat"><div class="v">${num(g.peopleReached)}</div><div class="k">people reached through a friend's link</div></div>
+        <div class="stat"><div class="v">${num(g.peopleReached)}</div><div class="k">guest browsers reached through shared links</div></div>
         <div class="stat"><div class="v">${num(g.referredSplits)}</div><div class="k">splits started from someone else's split</div></div>
         <div class="stat"><div class="v">${num(g.longestChain)}</div><div class="k">longest referral chain (generations)</div></div>
       </div>
@@ -40,10 +40,11 @@ export function mountGrowth(root) {
         <h2>The loop</h2>
         <div class="funnel">
           <div class="funnel-row"><span>Opened a friend's link</span>${bar(g.peopleReached)}<span class="mono">${num(g.peopleReached)}</span></div>
-          <div class="funnel-row"><span>Joined and tapped</span>${bar(g.joined)}<span class="mono">${num(g.joined)}</span></div>
-          <div class="funnel-row"><span>Paid their share</span>${bar(g.paid)}<span class="mono">${num(g.paid)}</span></div>
+          <div class="funnel-row"><span>Joined a bill</span>${bar(g.joined)}<span class="mono">${num(g.joined)}</span></div>
+          <div class="funnel-row"><span>Marked as paid</span>${bar(g.paid)}<span class="mono">${num(g.paid)}</span></div>
           <div class="funnel-row"><span>Split their own bill</span>${bar(g.becameCreators)}<span class="mono">${num(g.becameCreators)}</span></div>
         </div>
+        <p class="small muted">Link opens and new creators count unique browsers. Joins and payment marks count each bill separately.</p>
       </section>
       <section class="card">
         <h2>Last 14 days</h2>
@@ -57,11 +58,11 @@ export function mountGrowth(root) {
         <div class="legend"><span><i style="background:var(--ink)"></i>splits created</span><span><i style="background:var(--hl)"></i>friends joined</span></div>
       </section>
       <section class="card">
-        <h2>Money settled through Tapsplit</h2>
+        <h2>Payments confirmed by the person who paid the bill</h2>
         ${
           g.settled.length
             ? g.settled.map((s) => `<div class="trow"><span>${num(s.n)} payment${s.n === 1 ? '' : 's'}</span><span class="mono">${money(s.amount, s.currency)}</span></div>`).join('')
-            : '<p class="muted small" style="margin:0">No payments marked yet.</p>'
+            : '<p class="muted small" style="margin:0">No payments confirmed yet.</p>'
         }
         <h2 style="margin-top:16px">How links get shared</h2>
         ${

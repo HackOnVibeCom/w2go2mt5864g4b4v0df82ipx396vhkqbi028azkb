@@ -25,6 +25,7 @@ function route() {
     document.title = 'Tapsplit · Snap the bill, everyone taps what they had';
     cleanup = mountCreate(root, { ref: url.searchParams.get('ref') });
   }
+  root.dataset.view = nav;
   document.querySelectorAll('[data-nav]').forEach((a) => {
     if (a.dataset.nav === nav) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');

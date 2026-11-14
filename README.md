@@ -4,17 +4,20 @@
 
 **Live:** https://tapsplit.tameimpala.workers.dev (also at the team site https://w2go2mt5864g4b4v0df82ipx396vhkqbi028azkb.hackonvibe.com)
 
-Tapsplit splits a restaurant bill by what each person actually ate, tax and tip included, down to the last paisa or cent. The person who paid snaps the receipt and drops one link in the group chat. Friends open it in their browser (no app, no sign-up), tap their items, see their exact share and pay back in one tap. The payer watches the board fill up and ticks off who has paid.
+Tapsplit splits a restaurant bill by what each person actually ate, tax and tip included, down to the last paisa or cent. The payer drops one link in the group chat. Friends tap their items in the browser, then the payer locks the shares so everyone can pay the amount shown.
 
 Built for HackOnVibe November 2026, theme **Zero-CAC IT product**.
 
 ## Try it (2 minutes, no account)
 
-1. Open https://tapsplit.tameimpala.workers.dev and tap **Try a sample bill** (or scan a real receipt).
+For a quick walkthrough, tap **Try the interactive demo**. It runs both roles in one browser and keeps practice activity out of Live stats.
+
+1. Tap **Try a sample bill** in the bill editor (or scan a real receipt).
 2. Check the items, type your name, pick how friends pay you (UPI, PayPal, Venmo, Cash App, Revolut, Wise, any link, or just track it). Tap **Create split & get link**.
 3. Copy the link and open it in a private window or on your phone. You are now a friend: type a name and tap a few items. Your share updates instantly. Shared dishes split between everyone who tapped them, and "Beer ×3" bills per glass.
-4. Tap **I've paid**. Back in the first window, the payer's board updates within seconds; tap **Got it** to confirm.
-5. As the friend, tap **Split your own bill**, then open **Live stats** to watch that referral show up in the growth loop.
+4. Claim all remaining items in the payer window and tap **Finalize shares**. Reopen claims if someone needs to make a correction before a payment is recorded.
+5. In the guest window, tap **I've paid** once payment is sent. Back in the payer window, tap **Got it** after receiving it.
+6. As the friend, tap **Split your own bill** and create a new bill. Open **Live stats** to see the referral.
 
 ## Why it spreads on its own (zero CAC)
 
@@ -34,7 +37,8 @@ Tapsplit can't be used alone. Every split needs everyone at the table to open th
 | Receipt reading | On-device OCR (Tesseract.js) plus our parser by default; Claude vision when `ANTHROPIC_API_KEY` is set, falling back to on-device OCR if it is unavailable |
 | Check against the printed total | Warns when the lines don't add up to the receipt's grand total |
 | Exact split engine | Shared items, per-unit quantities, tax/service/tip/discount prorated by what you had, largest-remainder rounding, so shares always add up to the bill exactly |
-| Live tapping | Optimistic updates, auto-save, 4-second sync, initials on each item so nobody double-claims |
+| Live tapping | Optimistic updates, auto-save, 4-second sync and initials on each item |
+| Final shares | The payer locks claims once every priced item is covered. Payment opens at the locked amounts. |
 | Pay back in one tap | UPI, PayPal.me, Venmo and Cash App links open with the amount filled in. Revolut, Wise or any custom link open the payer's page |
 | Payer board | Who owes what, who says they paid, confirm received, unclaimed items, "who had this?" nudge, copyable summary |
 | Any currency | 48 currencies in the picker, each with its correct decimals (no paise-style decimals for JPY or KRW), auto-detected from your time zone |
@@ -80,7 +84,7 @@ Requires Node 22.13 or newer.
 ```bash
 npm install
 npm run dev     # http://localhost:8787
-npm test        # 16 tests: split math, receipt parsing, full API flow
+npm test        # split math, receipt parsing, full API flow
 ```
 
 Optional AI receipt reading: `ANTHROPIC_API_KEY=... npm run dev`.
@@ -89,10 +93,10 @@ Optional AI receipt reading: `ANTHROPIC_API_KEY=... npm run dev`.
 
 ```bash
 npx wrangler login
-npm run cf:setup     # creates the D1 database and applies the schema
+npm run cf:setup     # creates the D1 database if needed and applies all migrations
 npm run cf:deploy    # deploys and saves the URL to deploy.config.json
 ```
 
 Optional: `npx wrangler secret put ANTHROPIC_API_KEY`.
 
-The HackOnVibe team subdomain hosts static files only. Pushing to `main` runs `npm run build`, which copies `public/` to `dist/` and points it at the Worker URL saved in `deploy.config.json`.
+The HackOnVibe team subdomain hosts static files. Run `npm run cf:setup` and `npm run cf:deploy` before pushing this update to `main`, so the Worker supports finalization when the static site updates. The static build reads its Worker URL from `deploy.config.json`.
