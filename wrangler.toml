@@ -13,7 +13,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "tapsplit"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "5a7cbf18-91be-482b-b515-67ff0bf8f0d4"
 migrations_dir = "migrations"
 
 # Optional: enable AI receipt reading with `npx wrangler secret put ANTHROPIC_API_KEY`
