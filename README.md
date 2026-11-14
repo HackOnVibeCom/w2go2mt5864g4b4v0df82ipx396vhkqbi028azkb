@@ -2,7 +2,7 @@
 
 **Snap the bill. Share one link. Everyone taps what they had.**
 
-**Live:** https://tapsplit.tameimpala.workers.dev (also at the team site https://w2go2mt5864g4b4v0df82ipx396vhkqbi028azkb.hackonvibe.com)
+**Live:** https://tapsplit.tameimpala.workers.dev
 
 Tapsplit splits a restaurant bill by what each person actually ate, tax and tip included, down to the last paisa or cent. The payer drops one link in the group chat. Friends tap their items in the browser, then the payer locks the shares so everyone can pay the amount shown.
 
@@ -99,4 +99,4 @@ npm run cf:deploy    # deploys and saves the URL to deploy.config.json
 
 Optional: `npx wrangler secret put ANTHROPIC_API_KEY`.
 
-The HackOnVibe team subdomain hosts static files. Run `npm run cf:setup` and `npm run cf:deploy` before pushing this update to `main`, so the Worker supports finalization when the static site updates. The static build reads its Worker URL from `deploy.config.json`.
+Run `npm run cf:setup` before `npm run cf:deploy` so new migrations reach the database before the code that needs them. Pushing to `main` also runs `npm run build`, a static copy for the HackOnVibe team subdomain that reads its Worker URL from `deploy.config.json`. HackOnVibe has turned off automatic publishing for this hackathon, so the Worker URL above is the live app.
