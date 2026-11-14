@@ -30,6 +30,9 @@ export function parseReceipt(text, { digits = 2 } = {}) {
     if (!parsed) {
       if (!title && index < 4 && /[a-z]{3,}/i.test(line) && !SKIP_RE.test(line) && !TOTAL_RE.test(line)) {
         title = cleanName(line).slice(0, 60);
+        if (title === title.toUpperCase()) {
+          title = title.toLowerCase().replace(/(^|[\s'’(-])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase());
+        }
       }
       return;
     }

@@ -4,7 +4,7 @@ import { parseReceipt, SAMPLE_RECEIPT } from '../public/lib/parse.js';
 
 test('sample restaurant receipt parses into items, extras and total', () => {
   const r = parseReceipt(SAMPLE_RECEIPT);
-  assert.equal(r.title, 'THE COPPER KETTLE');
+  assert.equal(r.title, 'The Copper Kettle'); // ALL-CAPS receipt headers are title-cased
   assert.deepEqual(
     r.items.map((i) => [i.name, i.qty, i.amount]),
     [
