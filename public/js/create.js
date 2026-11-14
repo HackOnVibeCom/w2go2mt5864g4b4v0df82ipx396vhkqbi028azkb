@@ -140,7 +140,7 @@ export function mountCreate(root, { ref } = {}) {
     state.items = parsed.items.map((it) => ({ name: it.name, qty: it.qty || 1, amount: fmtInput(it.amount) }));
     state.extras = parsed.extras.map((e) => ({ label: e.label, amount: fmtInput(e.amount) }));
     state.receiptTotal = parsed.total || 0;
-    if (parsed.title && !state.title) state.title = parsed.title;
+    if (parsed.title && (!state.title || !state.titleTyped)) state.title = parsed.title; // a new receipt replaces the last one's name, not yours
     state.showEditor = true;
     state.note = source;
     if (!state.items.length) {
@@ -351,8 +351,10 @@ export function mountCreate(root, { ref } = {}) {
       if (row) row[t.dataset.k] = t.value;
       renderTotals();
     } else if (t.id === 'payer') state.payerName = t.value;
-    else if (t.id === 'title') state.title = t.value;
-    else if (t.id === 'handle') state.payHandle = t.value;
+    else if (t.id === 'title') {
+      state.title = t.value;
+      state.titleTyped = Boolean(t.value.trim());
+    } else if (t.id === 'handle') state.payHandle = t.value;
   }, opts);
 
   root.addEventListener('change', (e) => {
