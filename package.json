@@ -1,0 +1,23 @@
+{
+  "name": "tapsplit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Snap the bill, share one link, everyone taps what they had.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning src/node-server.js",
+    "start": "node --disable-warning=ExperimentalWarning src/node-server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/",
+    "build": "node scripts/build.mjs",
+    "cf:dev": "npx --yes wrangler@4.45.0 dev",
+    "cf:setup": "node scripts/cf-setup.mjs",
+    "cf:deploy": "npx --yes wrangler@4.45.0 deploy"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,18 @@
+# Cloudflare Workers deploy for Tapsplit (free plan is enough).
+# One-time setup: `npx wrangler login`, then `npm run cf:setup` (creates the D1
+# database, writes its id below, applies migrations), then `npm run cf:deploy`.
+name = "tapsplit"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tapsplit"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Optional: enable AI receipt reading with `npx wrangler secret put ANTHROPIC_API_KEY`
